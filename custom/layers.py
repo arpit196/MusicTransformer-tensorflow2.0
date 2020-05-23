@@ -304,6 +304,7 @@ class DecoderLayer(keras.layers.Layer):
         super(DecoderLayer, self).__init__()
 
         self.d_model = d_model
+        self.rga3 = RelativeGlobalAttention(d=d_model, h=h, max_seq=max_seq, add_emb=additional)
         self.rga2 = RelativeGlobalAttention(d=d_model, h=h, max_seq=max_seq, add_emb=additional)
         self.rga = RelativeGlobalAttention(d=d_model, h=h, max_seq=max_seq, add_emb=additional)
 
@@ -328,6 +329,10 @@ class DecoderLayer(keras.layers.Layer):
             attn_out2, aw2 = self.rga2([out1, out1, out1], mask=mask)
         else:
             attn_out2, aw2 = self.rga2([out1, encode_out, encode_out], mask=mask)
+        
+        if encode_voice_out is not None:
+            attn_out3, aw3 = self.rga3([out1, encode_out, encode_out], mask=mask)
+        
         attn_out2 = self.dropout2(attn_out2, training=training)
         attn_out2 = self.layernorm2(out1+attn_out2)
 
@@ -387,7 +392,7 @@ class Decoder(keras.layers.Layer):
                            for i in range(num_layers)]
         self.dropout = keras.layers.Dropout(rate)
 
-    def call(self, x, mask, lookup_mask, training, enc_output=None):
+    def call(self, x, mask, lookup_mask, training, enc_output=None, enc_voice_output=None):
         weights = []
         # adding embedding and position encoding.
         x = self.embedding(x)  # (batch_size, input_seq_len, d_model)
@@ -396,7 +401,7 @@ class Decoder(keras.layers.Layer):
         x = self.dropout(x, training=training)
         for i in range(self.num_layers):
             x, w1, w2 = \
-                self.dec_layers[i](x, enc_output, lookup_mask=lookup_mask, mask=mask, training=training, w_out=True)
+                self.dec_layers[i](x, enc_output, enc_voice_output, lookup_mask=lookup_mask, mask=mask, training=training, w_out=True)
             weights.append((w1, w2))
 
         return x, weights  # (batch_size, input_seq_len, d_model)
